@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "logo",
+      "description": "Business professional logo",
+      "imageUrl": "https://picsum.photos/seed/facturaflow/200/200",
+      "imageHint": "business logo"
+    },
+    {
+      "id": "profile",
+      "description": "User profile avatar",
+      "imageUrl": "https://picsum.photos/seed/user1/100/100",
+      "imageHint": "user profile"
+    }
+  ]
+}

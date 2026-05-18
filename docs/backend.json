@@ -1,0 +1,136 @@
+
+{
+  "entities": {
+    "Company": {
+      "title": "Company",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ruc": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "ruc", "isActive"]
+    },
+    "Role": {
+      "title": "Role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name", "description"]
+    },
+    "User": {
+      "title": "User",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "password": { "type": "string" },
+        "roleId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "associatedBranchIds": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" },
+        "isPayless": { "type": "boolean", "description": "Si es true, tiene interfaz de administrador pero limitada a sus sedes asignadas." }
+      },
+      "required": ["id", "firstName", "lastName", "password", "roleId", "isActive", "companyId"]
+    },
+    "Branch": {
+      "title": "Branch",
+      "type": "object",
+      "description": "Profit Center / Sucursal.",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "city": { "type": "string" },
+        "type": { "type": "string", "enum": ["ALTA", "MEDIA", "BAJA"], "description": "Nivel de rotación" },
+        "address": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "Product": {
+      "title": "Product",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "masterId": { "type": "string", "description": "ID para vincular réplicas en red nacional" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["ALBUM", "SOBRE", "CROMO", "CAJA", "OTRO"] },
+        "cost": { "type": "number" },
+        "defaultPrice": { "type": "number" },
+        "inventoryLevel": { "type": "number" },
+        "branchId": { "type": "string" },
+        "sku": { "type": "string" }
+      }
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "branchId": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "profit": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "InventoryMovement": {
+      "title": "Inventory Movement",
+      "type": "object",
+      "description": "Registro de auditoría de entradas y salidas de productos.",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "branchId": { "type": "string" },
+        "branchName": { "type": "string" },
+        "type": { "type": "string", "enum": ["IN", "OUT"] },
+        "reason": { "type": "string" },
+        "quantity": { "type": "number" },
+        "stockAfter": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "referenceId": { "type": "string" }
+      }
+    },
+    "Customer": {
+      "title": "Customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rucOrCedula": { "type": "string" },
+        "razonSocial": { "type": "string" },
+        "direccion": { "type": "string" },
+        "email": { "type": "string" },
+        "telefono": { "type": "string" },
+        "lastPurchase": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rucOrCedula", "razonSocial"]
+    }
+  },
+  "auth": { "providers": ["anonymous"] },
+  "firestore": {
+    "structure": [
+      { "path": "/companies/{companyId}", "definition": { "entityName": "Company" } },
+      { "path": "/users/{userId}", "definition": { "entityName": "User" } },
+      { "path": "/branches/{branchId}", "definition": { "entityName": "Branch" } },
+      { "path": "/product_services/{productId}", "definition": { "entityName": "Product" } },
+      { "path": "/invoices/{invoiceId}", "definition": { "entityName": "Invoice" } },
+      { "path": "/cash_closures/{closureId}", "definition": { "entityName": "CashClosure" } },
+      { "path": "/inventory_movements/{movementId}", "definition": { "entityName": "InventoryMovement" } },
+      { "path": "/national_strategies/{strategyId}", "definition": { "entityName": "NationalStrategy" } },
+      { "path": "/customers/{customerId}", "definition": { "entityName": "Customer" } }
+    ]
+  }
+}

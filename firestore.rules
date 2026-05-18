@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    /**
+     * FacturaFlow - MODO BASE DE DATOS PURA
+     * Acceso gestionado por lógica de aplicación (Cédula/Rol).
+     * Se permite acceso libre para funcionar sin Firebase Auth.
+     */
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
