@@ -54,6 +54,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { emitirFactura } from '@/app/actions/sri-actions';
 import { validateEcuadorianId } from '@/lib/id-validator';
 import { generateInvoiceXML } from '@/lib/sri-xml-generator';
+import { getBillingPDFBase64 } from '@/lib/billing-pdf-generator';
+import { sendInvoiceEmail } from '@/app/actions/email-actions';
 import { cn } from '@/lib/utils';
 
 export default function NewInvoicePage() {
@@ -308,6 +310,59 @@ export default function NewInvoicePage() {
         batch.update(doc(firestore, 'product_services', item.productId), { inventoryLevel: increment(-qty), updatedAt: new Date().toISOString() });
       }
       await batch.commit();
+
+      // Enviar el correo al cliente de forma silenciosa (no bloquea si falla el correo)
+      const esConsumidorFinal = buyerInfo.rucOrCedula === '9999999999999';
+      if (!esConsumidorFinal && buyerInfo.email && buyerInfo.email.includes('@')) {
+        try {
+          // 1. Preparar datos para el PDF
+          const pdfItems = items.map(i => {
+            const qty = Number(i.quantity === "" ? 1 : i.quantity);
+            const discountAmount = (i.price * qty) * (i.discountPercent / 100);
+            return {
+              quantity: qty,
+              productName: i.productName,
+              unitPrice: i.price,
+              discountAmount: discountAmount
+            };
+          });
+
+          // 2. Generar Base64 del RIDE
+          const pdfBase64 = getBillingPDFBase64({
+            title: "Factura",
+            client: {
+              name: buyerInfo.razonSocial || 'CONSUMIDOR FINAL',
+              ruc: buyerInfo.rucOrCedula,
+              address: buyerInfo.direccion || 'QUITO',
+              email: buyerInfo.email,
+              paymentMethod,
+              transferNumber: paymentMethod === '20' ? transferNumber : undefined
+            },
+            items: pdfItems,
+            subtotal: subtotalNeto,
+            iva: totalConIVA - subtotalNeto,
+            total: totalConIVA,
+            date: new Date().toLocaleDateString('es-ES'),
+            time: new Date().toLocaleString('es-ES'),
+            docNumber: invoiceNumber,
+            accessKey: resSRI.claveAcceso,
+            isAuthorized: true
+          });
+
+          // 3. Llamar a la acción de envío pasándole el XML Autorizado y el PDF Base64
+          await sendInvoiceEmail(
+            buyerInfo.email, 
+            invoiceNumber, 
+            buyerInfo.razonSocial || 'CONSUMIDOR FINAL', 
+            totalConIVA, 
+            resSRI.autorizacion,
+            pdfBase64
+          );
+        } catch (emailErr) {
+          console.error("Error en el envío silencioso de email:", emailErr);
+        }
+      }
+
       setIsProcessModalOpen(true);
     } catch (e: any) {
       toast({ variant: "destructive", title: "Falla", description: e.message });
@@ -334,6 +389,16 @@ export default function NewInvoicePage() {
     }
   };
 
+  const resetForm = () => {
+    setItems([]);
+    clearBuyer();
+    setPaymentMethod('01');
+    setTransferNumber('');
+    setIsProcessModalOpen(false);
+    setProductSearchTerm('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (loadingProfile) return <DashboardShell><div className="flex justify-center py-40"><Loader2 className="animate-spin w-10 h-10 text-black" /></div></DashboardShell>;
 
   return (
@@ -343,7 +408,7 @@ export default function NewInvoicePage() {
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2 md:gap-3">
               <Badge className="bg-black text-white font-black text-[9px] uppercase px-3 md:px-4 py-1.5 rounded-lg shadow-sm">PUNTO DE VENTA</Badge>
-              {(isOwner || assignedBranchIds.length > 1) && (
+              {(isOwner || assignedBranchIds.length > 1) ? (
                 <Popover open={isBranchMenuOpen} onOpenChange={setIsBranchMenuOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="h-9 md:h-10 rounded-xl px-3 md:px-4 bg-white border-slate-200 text-[9px] md:text-[10px] font-black uppercase gap-2 shadow-sm hover:bg-slate-50 transition-all">
@@ -368,6 +433,11 @@ export default function NewInvoicePage() {
                     </ScrollArea>
                   </PopoverContent>
                 </Popover>
+              ) : (
+                <div className="flex items-center gap-2 h-9 md:h-10 rounded-xl px-3 md:px-4 bg-white border border-slate-200 text-[9px] md:text-[10px] font-black uppercase shadow-sm">
+                  <Building2 className="w-3.5 md:w-4 h-3.5 md:h-4 text-slate-400" />
+                  OPERANDO DESDE: <span className="text-blue-600 truncate">{currentBranch?.name || 'SIN ASIGNAR'}</span>
+                </div>
               )}
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
@@ -625,18 +695,44 @@ export default function NewInvoicePage() {
       </div>
 
       {/* MODAL ÉXITO */}
-      <Dialog open={isProcessModalOpen} onOpenChange={() => window.location.reload()}>
-        <DialogContent className="w-[95%] max-w-[400px] md:max-w-[450px] rounded-[2rem] md:rounded-[3.5rem] p-8 md:p-12 text-center border-none shadow-2xl bg-white">
-          <div className="absolute top-0 left-0 w-full h-1.5 md:h-2 bg-green-500" />
-          <div className="flex flex-col items-center space-y-6 md:space-y-8">
-            <div className="w-20 md:w-24 h-20 md:h-24 bg-green-50 rounded-[2.5rem] md:rounded-[3.5rem] flex items-center justify-center animate-bounce shadow-inner border border-green-100">
-              <CheckCircle2 className="w-10 md:w-12 h-10 md:h-12 text-green-500" />
+      <Dialog open={isProcessModalOpen} onOpenChange={setIsProcessModalOpen}>
+        <DialogContent 
+          onInteractOutside={(e) => e.preventDefault()} 
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          className="w-[95%] max-w-[420px] md:max-w-[480px] rounded-[2.5rem] md:rounded-[3.5rem] p-0 text-center border border-white/10 shadow-2xl bg-slate-900 overflow-hidden [&>button]:text-white/50 hover:[&>button]:text-white"
+        >
+          <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-blue-500/10 opacity-50 pointer-events-none" />
+          <div className="absolute -top-32 -left-32 w-64 h-64 bg-green-500/20 blur-[100px] rounded-full pointer-events-none" />
+          <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-blue-500/20 blur-[100px] rounded-full pointer-events-none" />
+          
+          <div className="relative z-10 p-10 md:p-14 flex flex-col items-center space-y-8">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-green-500 rounded-full blur-xl opacity-20 animate-pulse" />
+              <div className="relative w-24 md:w-28 h-24 md:h-28 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-2xl shadow-green-500/30 border-4 border-slate-900 group-hover:scale-105 transition-transform duration-500">
+                <Check className="w-12 md:w-14 h-12 md:h-14 text-white stroke-[3] drop-shadow-md" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <UIDialogTitle className="text-2xl md:text-3xl font-black tracking-tighter text-slate-900 uppercase">¡Venta Exitosa!</UIDialogTitle>
-              <p className="text-slate-500 font-medium text-sm md:text-base">El comprobante ha sido autorizado por el SRI y registrado correctamente.</p>
+            
+            <div className="space-y-4">
+              <UIDialogTitle className="text-3xl md:text-4xl font-black tracking-tighter text-white uppercase leading-none drop-shadow-sm">¡Venta Exitosa!</UIDialogTitle>
+              <div className="space-y-2">
+                <p className="text-slate-400 font-medium text-sm md:text-base px-2 leading-relaxed">
+                  El comprobante ha sido autorizado por el SRI y registrado correctamente.
+                </p>
+                {buyerInfo.email && buyerInfo.email.includes('@') && (
+                  <p className="text-[11px] md:text-xs font-black text-green-400 uppercase tracking-widest bg-green-500/10 py-2 px-4 rounded-full border border-green-500/20 inline-flex items-center gap-2">
+                    <Mail className="w-3 h-3" /> Correo enviado
+                  </p>
+                )}
+              </div>
             </div>
-            <Button onClick={() => window.location.reload()} className="w-full h-16 md:h-20 rounded-2xl md:rounded-[2rem] bg-black text-white font-black text-lg md:text-xl active:scale-95 transition-all">NUEVA TRANSACCIÓN</Button>
+            
+            <Button 
+              onClick={resetForm} 
+              className="w-full h-16 md:h-20 rounded-[1.5rem] md:rounded-[2rem] bg-white text-slate-900 font-black text-lg md:text-xl shadow-[0_8px_30px_rgb(255,255,255,0.12)] hover:shadow-[0_8px_30px_rgb(255,255,255,0.2)] hover:bg-slate-50 active:scale-95 transition-all duration-300 ease-out"
+            >
+              NUEVA TRANSACCIÓN
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

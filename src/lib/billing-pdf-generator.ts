@@ -2,7 +2,7 @@
 'use client';
 
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import JsBarcode from 'jsbarcode';
 
 interface PDFData {
@@ -183,7 +183,7 @@ function createPDFDoc(data: PDFData) {
       ];
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 142,
       margin: { left: 10, right: 10 },
       head: [['Cod. Principal', 'Cod. Auxiliar', 'Cantidad', 'Descripción', 'Detalle Adicional', 'Precio Unitario', 'Subsidio', 'Precio sin Subsidio', 'Descuento', 'Precio Total']],

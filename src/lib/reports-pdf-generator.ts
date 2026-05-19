@@ -2,7 +2,7 @@
 'use client';
 
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface BranchReportData {
   companyName: string;
@@ -88,7 +88,7 @@ export function generateBranchDailyReportPDF(data: BranchReportData) {
   doc.text('ACTA DE AUDITORÍA Y CIERRE DE TURNO', 40, 23);
   doc.line(10, 38, 200, 38);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 42,
     body: [['SUCURSAL:', data.branchName.toUpperCase()], ['FECHA CIERRE:', data.date], ['RESPONSABLE:', data.responsible.toUpperCase()]],
     theme: 'plain',
@@ -98,7 +98,7 @@ export function generateBranchDailyReportPDF(data: BranchReportData) {
   let curY = (doc as any).lastAutoTable.finalY + 4;
   doc.setFont('helvetica', 'bold');
   doc.text('RESUMEN FINANCIERO:', 10, curY);
-  doc.autoTable({
+  autoTable(doc, {
     startY: curY + 2,
     body: [['TOTAL BRUTO FACTURADO:', `$${data.summary.totalSales.toFixed(2)}`], ['EFECTIVO:', `$${data.paymentMethods.cash.toFixed(2)}`], ['TARJETAS:', `$${data.paymentMethods.card.toFixed(2)}`], ['TRANSFERENCIAS:', `$${data.paymentMethods.transfer.toFixed(2)}`]],
     theme: 'grid',
@@ -110,7 +110,7 @@ export function generateBranchDailyReportPDF(data: BranchReportData) {
     curY = (doc as any).lastAutoTable.finalY + 4;
     doc.setFont('helvetica', 'bold');
     doc.text('CUADRE DE CAJA:', 10, curY);
-    doc.autoTable({
+    autoTable(doc, {
       startY: curY + 2,
       body: [['VENTA ESPERADA:', `$${data.cashReconciliation.expectedTotal.toFixed(2)}`], ['CONTEO REAL:', `$${data.cashReconciliation.countedTotal.toFixed(2)}`], ['DIFERENCIA:', `$${data.cashReconciliation.difference.toFixed(2)}`]],
       theme: 'grid',
@@ -139,7 +139,7 @@ export function generateConsolidatedAnalyticsPDF(data: AnalyticsReportData) {
   doc.text('INFORME INTEGRAL DE GESTIÓN NACIONAL', 35, 20);
   doc.line(10, 32, 200, 32);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 35,
     body: [['ÁMBITO:', data.branchName.toUpperCase()], ['PERIODO:', data.period], ['FECHA EMISIÓN:', new Date().toLocaleString()]],
     theme: 'plain',
@@ -149,7 +149,7 @@ export function generateConsolidatedAnalyticsPDF(data: AnalyticsReportData) {
   let curY = (doc as any).lastAutoTable.finalY + 3;
   doc.setFont('helvetica', 'bold');
   doc.text('RECAUDACIÓN FACTURADA:', 10, curY);
-  doc.autoTable({
+  autoTable(doc, {
     startY: curY + 1,
     head: [['CONCEPTO', 'VALOR']],
     body: [['TOTAL FACTURADO:', `$${data.summary.totalSales.toFixed(2)}`], ['EFECTIVO (01):', `$${(data.paymentMethods['01'] || 0).toFixed(2)}`], ['TARJETAS (16/19):', `$${(data.paymentMethods['CARDS'] || 0).toFixed(2)}`], ['TRANSFERENCIAS (20):', `$${(data.paymentMethods['20'] || 0).toFixed(2)}`]],
@@ -163,7 +163,7 @@ export function generateConsolidatedAnalyticsPDF(data: AnalyticsReportData) {
 
   curY = (doc as any).lastAutoTable.finalY + 3;
   doc.text('DESPLAZAMIENTO POR PRODUCTO:', 10, curY);
-  doc.autoTable({
+  autoTable(doc, {
     startY: curY + 1,
     head: [['PRODUCTO', 'UDS.', 'RECAUDACIÓN']],
     body: data.byProduct.map(p => [p.name.toUpperCase(), p.quantity, `$${p.revenue.toFixed(2)}`]),
@@ -176,7 +176,7 @@ export function generateConsolidatedAnalyticsPDF(data: AnalyticsReportData) {
   curY = (doc as any).lastAutoTable.finalY + 3;
   if (curY > 270) { doc.addPage(); curY = 15; }
   doc.text('LIBRO DE VENTAS (HISTORIAL):', 10, curY);
-  doc.autoTable({
+  autoTable(doc, {
     startY: curY + 1,
     head: [['FACTURA', 'FECHA', 'CLIENTE', 'TOTAL', 'ESTADO']],
     body: data.transactions.map(t => [t.invoiceNumber, new Date(t.createdAt).toLocaleDateString(), (t.buyerInfo?.razonSocial || 'C. FINAL').substring(0, 30), `$${t.totalAmount.toFixed(2)}`, t.status === 'CANCELLED' ? 'ANULADA' : 'ACTIVA']),
@@ -189,7 +189,7 @@ export function generateConsolidatedAnalyticsPDF(data: AnalyticsReportData) {
   curY = (doc as any).lastAutoTable.finalY + 3;
   if (curY > 270) { doc.addPage(); curY = 15; }
   doc.text('HISTORIAL DE ARQUEOS:', 10, curY);
-  doc.autoTable({
+  autoTable(doc, {
     startY: curY + 1,
     head: [['FECHA', 'SUCURSAL', 'RESPONSABLE', 'DIFF']],
     body: data.closures.map(c => [new Date(c.createdAt).toLocaleDateString(), c.branchName.substring(0, 20), c.cashierName.substring(0, 20), `$${c.difference.toFixed(2)}`]),
@@ -213,7 +213,7 @@ export function generateClosuresReportPDF(data: { date: string; branchName: stri
   doc.text(`SEDE: ${data.branchName.toUpperCase()} | PERIODO: ${data.date}`, 35, 20);
   doc.line(10, 32, 200, 32);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 35,
     head: [['FECHA', 'SUCURSAL', 'RESPONSABLE', 'VENTA', 'DIFF']],
     body: data.closures.map(c => [new Date(c.createdAt).toLocaleDateString(), c.branchName.substring(0, 20), c.cashierName.substring(0, 20), `$${c.totalSales.toFixed(2)}`, `$${c.difference.toFixed(2)}`]),

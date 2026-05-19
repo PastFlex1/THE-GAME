@@ -29,7 +29,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, query, where, doc, writeBatch, increment, limit } from 'firebase/firestore';
+import { collection, query, where, doc, writeBatch, increment, limit, getDocs, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
@@ -38,6 +38,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -56,7 +62,8 @@ import { Badge } from '@/components/ui/badge';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import Link from 'next/link';
 import { InvoiceRideView } from '@/components/InvoiceRideView';
-import { downloadXML, generateInvoiceXML } from '@/lib/sri-xml-generator';
+import { downloadXML, generateInvoiceXML, generateCreditNoteXML } from '@/lib/sri-xml-generator';
+import { emitirNotaCredito } from '@/app/actions/sri-actions';
 
 export default function InvoicesPage() {
   const firestore = useFirestore();
@@ -72,6 +79,7 @@ export default function InvoicesPage() {
   const [endDate, setEndDate] = useState<string>('');
   
   const [isAnnuling, setIsAnnuling] = useState<string | null>(null);
+  const [showAnnulSuccess, setShowAnnulSuccess] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -188,11 +196,73 @@ export default function InvoicesPage() {
     if (!firestore || invoice.status === 'CANCELLED') return;
     setIsAnnuling(invoice.id);
     try {
+      // 1. Calcular el próximo secuencial de Nota de Crédito
+      let nextSequential = 1;
+      const cnQuery = query(collection(firestore, 'invoices'), orderBy('creditNoteNumber', 'desc'), limit(1));
+      const cnSnap = await getDocs(cnQuery);
+      if (!cnSnap.empty) {
+        const lastCN = cnSnap.docs[0].data().creditNoteNumber;
+        if (lastCN) {
+          const parts = lastCN.split('-');
+          if (parts.length === 3) {
+            nextSequential = parseInt(parts[2], 10) + 1;
+          }
+        }
+      }
+      const cnSequentialStr = nextSequential.toString().padStart(9, '0');
+      const creditNoteNumber = `002-002-${cnSequentialStr}`;
+
+      const formatDate = (d: Date) => {
+        const day = d.getDate().toString().padStart(2, '0');
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const year = d.getFullYear().toString();
+        return `${day}/${month}/${year}`;
+      };
+
+      // 2. Generar XML de Nota de Crédito
+      const ncXml = generateCreditNoteXML({
+        rucEmisor: "1793221927001",
+        razonSocialEmisor: "THEGAMEEC S.A.S",
+        dirMatriz: FIXED_MATRIZ_ADDRESS,
+        estab: "002",
+        ptoEmi: "002",
+        secuencial: cnSequentialStr,
+        fechaEmision: formatDate(new Date()),
+        cliente: {
+          razonSocial: invoice.buyerInfo.razonSocial,
+          identificacion: invoice.buyerInfo.rucOrCedula,
+          direccion: invoice.buyerInfo.direccion,
+          email: invoice.buyerInfo.email
+        },
+        items: invoice.items.map((i: any) => ({
+          descripcion: i.productName,
+          cantidad: i.quantity,
+          precioUnitario: i.unitPrice / 1.15,
+          descuento: 0
+        })),
+        formaPago: invoice.paymentMethod || '01',
+        facturaModificada: {
+          numero: invoice.invoiceNumber,
+          fecha: formatDate(new Date(invoice.createdAt))
+        }
+      });
+
+      // 3. Emitir Nota de Crédito al SRI
+      const resSRI = await emitirNotaCredito(ncXml);
+      
+      if (!resSRI.success) {
+        throw new Error(`Error SRI: ${resSRI.error}`);
+      }
+
+      // 4. Procesar la anulación interna en Firebase
       const batch = writeBatch(firestore);
       batch.update(doc(firestore, 'invoices', invoice.id), { 
         status: 'CANCELLED', 
         annulledAt: new Date().toISOString(), 
-        annulledBy: resolvedIdentification 
+        annulledBy: resolvedIdentification,
+        creditNoteNumber: creditNoteNumber,
+        creditNoteAuth: resSRI.autorizacion,
+        creditNoteAccessKey: resSRI.claveAcceso
       });
       
       if (invoice.items && Array.isArray(invoice.items)) {
@@ -206,16 +276,17 @@ export default function InvoicesPage() {
             batch.set(moveRef, {
               productId: item.productId, productName: item.productName, branchId: invoice.branchId, branchName: invoice.branchName || 'Sede',
               companyId: companyId || '1793221927001', type: 'IN', quantity: item.quantity, 
-              reason: `ANULACIÓN FACTURA ${invoice.invoiceNumber}`, createdAt: new Date().toISOString(), 
+              reason: 'ANULACIÓN', createdAt: new Date().toISOString(), 
               userId: resolvedIdentification, userName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Usuario Sistema'
             });
           }
         }
       }
       await batch.commit();
-      toast({ title: "Factura Anulada" });
+      setShowAnnulSuccess(true);
+      toast({ title: "Nota de Crédito Emitida", description: `Factura anulada con NC: ${creditNoteNumber}` });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message });
+      toast({ variant: "destructive", title: "Error en Anulación", description: error.message });
     } finally {
       setIsAnnuling(null);
     }
@@ -498,7 +569,51 @@ export default function InvoicesPage() {
               </div>
             </div>
           </SheetContent>
-        </Sheet>
+      </Sheet>
+
+        {/* MODAL DE PROCESANDO ANULACIÓN */}
+        <Dialog open={!!isAnnuling} onOpenChange={() => {}}>
+          <DialogContent className="sm:max-w-md border-none shadow-2xl p-0 overflow-hidden rounded-[2rem] bg-slate-900 [&>button]:hidden">
+            <div className="flex flex-col items-center justify-center p-12 text-center">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse rounded-full" />
+                <div className="bg-slate-800 p-6 rounded-[2rem] relative border border-white/5">
+                  <Loader2 className="w-12 h-12 text-blue-400 animate-spin" />
+                </div>
+              </div>
+              <DialogTitle className="mt-8 text-2xl font-black tracking-tight text-white uppercase">Anulando Factura</DialogTitle>
+              <p className="text-sm font-bold tracking-widest uppercase text-slate-400 mt-2">
+                Conectando con el SRI...
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL DE ANULACIÓN EXITOSA */}
+        <Dialog open={showAnnulSuccess} onOpenChange={setShowAnnulSuccess}>
+          <DialogContent className="sm:max-w-md border-none shadow-2xl p-0 overflow-hidden rounded-[2rem] bg-white [&>button]:hidden">
+            <div className="flex flex-col items-center justify-center p-12 text-center relative overflow-hidden">
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-green-500/10 blur-3xl rounded-full" />
+              <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-emerald-500/10 blur-3xl rounded-full" />
+              
+              <div className="bg-green-50 p-6 rounded-[2rem] relative shadow-inner mb-6">
+                <Check className="w-16 h-16 text-green-500" strokeWidth={3} />
+              </div>
+              <DialogTitle className="text-3xl font-black tracking-tighter text-slate-900 uppercase">Anulación Exitosa</DialogTitle>
+              <p className="text-xs font-bold tracking-widest uppercase text-slate-400 mt-3 max-w-[250px]">
+                La Nota de Crédito ha sido autorizada por el SRI
+              </p>
+              
+              <Button 
+                onClick={() => setShowAnnulSuccess(false)}
+                className="mt-10 w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black tracking-widest uppercase"
+              >
+                Continuar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </TooltipProvider>
     </DashboardShell>
   );

@@ -31,6 +31,20 @@ export interface SRIInvoiceData {
   }>;
   formaPago: string;
   codigoNumerico?: string; 
+  facturaModificada?: {
+    numero: string;
+    fecha: string;
+  };
+}
+
+export interface SRICreditNoteData extends SRIInvoiceData {
+  numDocModificado: string; // Ej: 002-002-000000001
+  fechaEmisionDocSustento: string; // Fecha de la factura original
+  motivo: string;
+}
+
+function safe(v: any): number {
+  return typeof v === 'number' && !isNaN(v) ? v : Number(v) || 0;
 }
 
 function calculateCheckDigit(key: string): string {
@@ -62,7 +76,9 @@ export function generateAccessKey(data: any, codDoc: string = "01"): string {
   const codigoNumerico = data.codigoNumerico || Math.floor(10000000 + Math.random() * 90000000).toString();
   const tipoEmision = "1";
 
-  const baseKey = dateStr + codDoc + ruc + ambiente + serie + secuencial + codigoNumerico + tipoEmision;
+  const activeCodDoc = data.tipoComprobante || data.codDoc || codDoc;
+
+  const baseKey = dateStr + activeCodDoc + ruc + ambiente + serie + secuencial + codigoNumerico + tipoEmision;
   const dv = calculateCheckDigit(baseKey);
   return baseKey + dv;
 }
@@ -179,3 +195,90 @@ export function downloadXML(xmlString: string, filename: string) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export function generateCreditNoteXML(data: SRIInvoiceData): string {
+  const claveAcceso = generateAccessKey({
+    ...data,
+    tipoComprobante: "04"
+  });
+
+  const subtotal = (data.items || []).reduce(
+    (acc, i) => acc + (safe(i.cantidad) * safe(i.precioUnitario)),
+    0
+  );
+
+  // En THE-GAME los productos tienen IVA 15%
+  const valorIVA = subtotal * 0.15;
+  const total = subtotal + valorIVA;
+
+  let tipoId = "05";
+  const idStr = data.cliente.identificacion || "";
+  if (idStr === "9999999999999") {
+    tipoId = "07";
+  } else if (idStr.length === 13) {
+    tipoId = "04";
+  }
+
+  const esConsumidorFinal = idStr === "9999999999999";
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<notaCredito id="comprobante" version="1.0.0">\n\n`;
+
+  xml += `    <infoTributaria>\n`;
+  xml += `        <ambiente>1</ambiente>\n`; // Usamos ambiente 1 (Pruebas) según config
+  xml += `        <tipoEmision>1</tipoEmision>\n`;
+  xml += `        <razonSocial>${data.razonSocialEmisor}</razonSocial>\n`;
+  xml += `        <nombreComercial>${data.nombreComercialEmisor || "THEGAMEEC S.A.S"}</nombreComercial>\n`;
+  xml += `        <ruc>${data.rucEmisor}</ruc>\n`;
+  xml += `        <claveAcceso>${claveAcceso}</claveAcceso>\n`;
+  xml += `        <codDoc>04</codDoc>\n`;
+  xml += `        <estab>${data.estab.padStart(3, "0")}</estab>\n`;
+  xml += `        <ptoEmi>${data.ptoEmi.padStart(3, "0")}</ptoEmi>\n`;
+  xml += `        <secuencial>${data.secuencial.padStart(9, "0")}</secuencial>\n`;
+  xml += `        <dirMatriz>${data.dirMatriz}</dirMatriz>\n`;
+  xml += `    </infoTributaria>\n\n`;
+
+  xml += `    <infoNotaCredito>\n`;
+  xml += `        <fechaEmision>${data.fechaEmision}</fechaEmision>\n`;
+  xml += `        <dirEstablecimiento>${data.dirMatriz}</dirEstablecimiento>\n`;
+  xml += `        <tipoIdentificacionComprador>${tipoId}</tipoIdentificacionComprador>\n`;
+  xml += `        <razonSocialComprador>${esConsumidorFinal ? "CONSUMIDOR FINAL" : data.cliente.razonSocial.toUpperCase()}</razonSocialComprador>\n`;
+  xml += `        <identificacionComprador>${data.cliente.identificacion}</identificacionComprador>\n`;
+  xml += `        <totalSinImpuestos>${safe(subtotal).toFixed(2)}</totalSinImpuestos>\n`;
+  xml += `        <valorModificacion>${safe(total).toFixed(2)}</valorModificacion>\n`;
+  xml += `        <moneda>DOLAR</moneda>\n`;
+  xml += `        <codDocModificado>01</codDocModificado>\n`;
+  xml += `        <numDocModificado>${data.facturaModificada?.numero}</numDocModificado>\n`;
+  xml += `        <fechaEmisionDocSustento>${data.facturaModificada?.fecha}</fechaEmisionDocSustento>\n`;
+  xml += `    </infoNotaCredito>\n\n`;
+
+  xml += `    <detalles>\n`;
+  (data.items || []).forEach((item) => {
+    const base = safe(item.cantidad) * safe(item.precioUnitario);
+    xml += `        <detalle>\n`;
+    xml += `            <descripcion>${item.descripcion.toUpperCase()}</descripcion>\n`;
+    xml += `            <cantidad>${safe(item.cantidad).toFixed(2)}</cantidad>\n`;
+    xml += `            <precioUnitario>${safe(item.precioUnitario).toFixed(6)}</precioUnitario>\n`;
+    xml += `            <descuento>0.00</descuento>\n`;
+    xml += `            <precioTotalSinImpuesto>${safe(base).toFixed(2)}</precioTotalSinImpuesto>\n`;
+    xml += `        </detalle>\n`;
+  });
+  xml += `    </detalles>\n\n`;
+
+  xml += `    <motivos>\n`;
+  xml += `        <motivo>\n`;
+  xml += `            <razon>ANULACION DE FACTURA</razon>\n`;
+  xml += `            <valor>${safe(total).toFixed(2)}</valor>\n`;
+  xml += `        </motivo>\n`;
+  xml += `    </motivos>\n`;
+
+  if (data.cliente.email && !esConsumidorFinal) {
+    xml += `    <infoAdicional>\n`;
+    xml += `        <campoAdicional nombre="email">${data.cliente.email}</campoAdicional>\n`;
+    xml += `    </infoAdicional>\n\n`;
+  }
+
+  xml += `</notaCredito>`;
+  return xml;
+}
+
