@@ -225,7 +225,7 @@ export function generateCreditNoteXML(data: SRIInvoiceData): string {
   xml += `<notaCredito id="comprobante" version="1.0.0">\n\n`;
 
   xml += `    <infoTributaria>
-        <ambiente>2</ambiente> // Usamos ambiente 2 (Producción) según config
+        <ambiente>2</ambiente>
         <tipoEmision>1</tipoEmision>\n`;
   xml += `        <razonSocial>${data.razonSocialEmisor}</razonSocial>\n`;
   xml += `        <nombreComercial>${data.nombreComercialEmisor || "THEGAMEEC S.A.S"}</nombreComercial>\n`;

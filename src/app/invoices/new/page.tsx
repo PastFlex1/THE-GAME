@@ -695,7 +695,13 @@ export default function NewInvoicePage() {
       </div>
 
       {/* MODAL ÉXITO */}
-      <Dialog open={isProcessModalOpen} onOpenChange={setIsProcessModalOpen}>
+      <Dialog open={isProcessModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          resetForm();
+        } else {
+          setIsProcessModalOpen(open);
+        }
+      }}>
         <DialogContent 
           onInteractOutside={(e) => e.preventDefault()} 
           onEscapeKeyDown={(e) => e.preventDefault()}
@@ -727,12 +733,24 @@ export default function NewInvoicePage() {
               </div>
             </div>
             
-            <Button 
-              onClick={resetForm} 
-              className="w-full h-16 md:h-20 rounded-[1.5rem] md:rounded-[2rem] bg-white text-slate-900 font-black text-lg md:text-xl shadow-[0_8px_30px_rgb(255,255,255,0.12)] hover:shadow-[0_8px_30px_rgb(255,255,255,0.2)] hover:bg-slate-50 active:scale-95 transition-all duration-300 ease-out"
-            >
-              NUEVA TRANSACCIÓN
-            </Button>
+            <div className="w-full space-y-3">
+              <Button 
+                onClick={resetForm} 
+                className="w-full h-16 md:h-20 rounded-[1.5rem] md:rounded-[2rem] bg-white text-slate-900 font-black text-lg md:text-xl shadow-[0_8px_30px_rgb(255,255,255,0.12)] hover:shadow-[0_8px_30px_rgb(255,255,255,0.2)] hover:bg-slate-50 active:scale-95 transition-all duration-300 ease-out"
+              >
+                NUEVA TRANSACCIÓN
+              </Button>
+              <Button 
+                onClick={() => {
+                  resetForm();
+                  router.push('/invoices');
+                }}
+                variant="ghost"
+                className="w-full h-12 text-slate-400 hover:text-white font-bold text-sm tracking-widest uppercase hover:bg-white/5 rounded-xl transition-all"
+              >
+                Ver Historial Facturas
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
