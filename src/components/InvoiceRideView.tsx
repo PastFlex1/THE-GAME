@@ -190,7 +190,7 @@ export function InvoiceRideView({ invoiceId, onClose }: InvoiceRideViewProps) {
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex justify-between"><span className="font-black uppercase text-slate-400">FECHA AUTORIZACIÓN:</span><span className="font-black text-slate-900">{invoice.status !== 'CANCELLED' ? getFormattedDateTime(invoice.createdAt) : "ANULADA"}</span></div>
-                  <div className="flex justify-between"><span className="font-black uppercase text-slate-400">AMBIENTE:</span><span className="font-bold">PRUEBAS</span></div>
+                  <div className="flex justify-between"><span className="font-black uppercase text-slate-400">AMBIENTE:</span><span className="font-bold">PRODUCCIÓN</span></div>
                   <div className="flex justify-between"><span className="font-black uppercase text-slate-400">EMISIÓN:</span><span className="font-bold">NORMAL</span></div>
                 </div>
               </div>

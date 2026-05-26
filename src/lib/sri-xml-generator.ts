@@ -70,7 +70,7 @@ export function generateAccessKey(data: any, codDoc: string = "01"): string {
   const dateStr = day + month + year;
 
   const ruc = data.rucEmisor.replace(/\D/g, "").padStart(13, "0");
-  const ambiente = "1"; 
+  const ambiente = "2"; 
   const serie = data.estab.padStart(3, "0") + data.ptoEmi.padStart(3, "0");
   const secuencial = data.secuencial.padStart(9, "0");
   const codigoNumerico = data.codigoNumerico || Math.floor(10000000 + Math.random() * 90000000).toString();
@@ -107,9 +107,9 @@ export function generateInvoiceXML(data: SRIInvoiceData): string {
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<factura id="comprobante" version="1.1.0">\n\n`;
-  xml += `    <infoTributaria>\n`;
-  xml += `        <ambiente>1</ambiente>\n`;
-  xml += `        <tipoEmision>1</tipoEmision>\n`;
+  xml += `    <infoTributaria>
+        <ambiente>2</ambiente>
+        <tipoEmision>1</tipoEmision>\n`;
   xml += `        <razonSocial>${data.razonSocialEmisor}</razonSocial>\n`;
   xml += `        <nombreComercial>${data.nombreComercialEmisor || "THEGAMEEC S.A.S"}</nombreComercial>\n`;
   xml += `        <ruc>${data.rucEmisor}</ruc>\n`;
@@ -224,9 +224,9 @@ export function generateCreditNoteXML(data: SRIInvoiceData): string {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<notaCredito id="comprobante" version="1.0.0">\n\n`;
 
-  xml += `    <infoTributaria>\n`;
-  xml += `        <ambiente>1</ambiente>\n`; // Usamos ambiente 1 (Pruebas) según config
-  xml += `        <tipoEmision>1</tipoEmision>\n`;
+  xml += `    <infoTributaria>
+        <ambiente>2</ambiente> // Usamos ambiente 2 (Producción) según config
+        <tipoEmision>1</tipoEmision>\n`;
   xml += `        <razonSocial>${data.razonSocialEmisor}</razonSocial>\n`;
   xml += `        <nombreComercial>${data.nombreComercialEmisor || "THEGAMEEC S.A.S"}</nombreComercial>\n`;
   xml += `        <ruc>${data.rucEmisor}</ruc>\n`;

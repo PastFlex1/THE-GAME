@@ -7,7 +7,7 @@
  * El RIDE (PDF) NO se envía al SRI, ya que el sistema nacional solo procesa datos estructurados.
  */
 
-const BASE_URL = "https://srigame-production.up.railway.app";
+const BASE_URL = "https://sri-the-game-production.up.railway.app";
 
 /**
  * 1. Firma el XML usando el certificado digital alojado en el servidor.

@@ -112,7 +112,7 @@ function createPDFDoc(data: PDFData) {
     doc.setFont('helvetica', 'bold');
     doc.text('AMBIENTE:', 110, 76);
     doc.setFont('helvetica', 'normal');
-    doc.text('PRUEBAS', 150, 76); 
+    doc.text('PRODUCCIÓN', 150, 76); 
     
     doc.setFont('helvetica', 'bold');
     doc.text('EMISIÓN:', 110, 83);

@@ -26,7 +26,9 @@ import {
   User,
   ExternalLink,
   Calculator,
-  Receipt
+  Receipt,
+  Mail,
+  RefreshCw
 } from 'lucide-react';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { collection, query, where, doc, writeBatch, increment, limit, getDocs, orderBy } from 'firebase/firestore';
@@ -63,7 +65,9 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import Link from 'next/link';
 import { InvoiceRideView } from '@/components/InvoiceRideView';
 import { downloadXML, generateInvoiceXML, generateCreditNoteXML } from '@/lib/sri-xml-generator';
-import { emitirNotaCredito } from '@/app/actions/sri-actions';
+import { emitirNotaCredito, emitirFactura } from '@/app/actions/sri-actions';
+import { sendInvoiceEmail } from '@/app/actions/email-actions';
+import { getBillingPDFBase64 } from '@/lib/billing-pdf-generator';
 
 export default function InvoicesPage() {
   const firestore = useFirestore();
@@ -81,6 +85,8 @@ export default function InvoicesPage() {
   const [isAnnuling, setIsAnnuling] = useState<string | null>(null);
   const [showAnnulSuccess, setShowAnnulSuccess] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [isResendingSRI, setIsResendingSRI] = useState<string | null>(null);
+  const [isResendingEmail, setIsResendingEmail] = useState<string | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -292,6 +298,106 @@ export default function InvoicesPage() {
     }
   };
 
+  const handleResendToSRI = async (inv: any) => {
+    if (!firestore || inv.status === 'CANCELLED') return;
+    setIsResendingSRI(inv.id);
+    try {
+      const xml = generateInvoiceXML({
+        rucEmisor: "1793221927001", razonSocialEmisor: "THEGAMEEC S.A.S", dirMatriz: FIXED_MATRIZ_ADDRESS, 
+        estab: "002", ptoEmi: "002", secuencial: inv.invoiceNumber.split('-')[2], 
+        fechaEmision: new Date(inv.createdAt).toLocaleDateString('es-ES'),
+        cliente: { razonSocial: inv.buyerInfo.razonSocial, identificacion: inv.buyerInfo.rucOrCedula, direccion: inv.buyerInfo.direccion, email: inv.buyerInfo.email },
+        items: inv.items.map((i: any) => ({ descripcion: i.productName, cantidad: i.quantity, precioUnitario: i.unitPrice / 1.15, descuento: 0 })),
+        formaPago: inv.paymentMethod
+      });
+
+      const resSRI = await emitirFactura(xml);
+      
+      if (!resSRI.success) {
+        throw new Error(`Error SRI: ${resSRI.error}`);
+      }
+
+      const sriResponse = {
+        xmlFirmado: resSRI.xmlFirmado,
+        recepcion: resSRI.recepcion,
+        autorizacion: resSRI.autorizacion,
+        claveAcceso: resSRI.claveAcceso
+      };
+
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, 'invoices', inv.id), { 
+        sriResponse,
+        xmlContent: xml
+      });
+      await batch.commit();
+
+      toast({ title: "SRI Actualizado", description: "Factura reenviada y datos sobrescritos para producción." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error en SRI", description: error.message });
+    } finally {
+      setIsResendingSRI(null);
+    }
+  };
+
+  const handleResendEmail = async (inv: any) => {
+    if (!inv.buyerInfo.email) {
+      toast({ variant: "destructive", title: "Sin correo", description: "El cliente no tiene un correo registrado." });
+      return;
+    }
+    setIsResendingEmail(inv.id);
+    try {
+      const xmlToUse = inv.xmlContent || generateInvoiceXML({
+        rucEmisor: "1793221927001", razonSocialEmisor: "THEGAMEEC S.A.S", dirMatriz: FIXED_MATRIZ_ADDRESS, 
+        estab: "002", ptoEmi: "002", secuencial: inv.invoiceNumber.split('-')[2], 
+        fechaEmision: new Date(inv.createdAt).toLocaleDateString('es-ES'),
+        cliente: { razonSocial: inv.buyerInfo.razonSocial, identificacion: inv.buyerInfo.rucOrCedula, direccion: inv.buyerInfo.direccion, email: inv.buyerInfo.email },
+        items: inv.items.map((i: any) => ({ descripcion: i.productName, cantidad: i.quantity, precioUnitario: i.unitPrice / 1.15, descuento: 0 })),
+        formaPago: inv.paymentMethod
+      });
+
+      const accessKey = inv.sriResponse?.claveAcceso || "0000000000000000000000000000000000000000000000000";
+
+      const pdfBase64 = getBillingPDFBase64({
+        title: "Factura",
+        docNumber: inv.invoiceNumber,
+        date: new Date(inv.createdAt).toLocaleDateString('es-ES'),
+        time: new Date(inv.createdAt).toLocaleString('es-ES'),
+        accessKey: accessKey,
+        isAuthorized: inv.status !== 'CANCELLED',
+        client: {
+          name: inv.buyerInfo.razonSocial,
+          ruc: inv.buyerInfo.rucOrCedula,
+          address: inv.buyerInfo.direccion || "QUITO",
+          email: inv.buyerInfo.email,
+          paymentMethod: inv.paymentMethod,
+          transferNumber: inv.transferNumber
+        },
+        items: inv.items,
+        subtotal: inv.subtotalAmount || 0,
+        iva: inv.taxAmount || 0,
+        total: inv.totalAmount || 0,
+        branchAddress: FIXED_MATRIZ_ADDRESS
+      });
+
+      const res = await sendInvoiceEmail(
+        inv.buyerInfo.email,
+        inv.invoiceNumber,
+        inv.buyerInfo.razonSocial,
+        inv.totalAmount,
+        xmlToUse,
+        pdfBase64
+      );
+
+      if (!res.success) throw new Error(res.error);
+
+      toast({ title: "Correo enviado", description: "El comprobante fue reenviado al cliente." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error de correo", description: error.message });
+    } finally {
+      setIsResendingEmail(null);
+    }
+  };
+
   const handleDownloadXML = (inv: any) => {
     // PRIORIZAMOS EL XML AUTORIZADO ALMACENADO EN EL DOCUMENTO
     if (inv.xmlContent) {
@@ -427,9 +533,15 @@ export default function InvoicesPage() {
                                <Download className="w-4 h-4 mr-2" /> Descargar XML (Oficial)
                              </DropdownMenuItem>
                              {inv.status !== 'CANCELLED' && isOwner && (
-                               <DropdownMenuItem className="rounded-xl font-bold p-3 text-destructive cursor-pointer" onSelect={() => handleAnnulInvoice(inv)}>
-                                 <Ban className="w-4 h-4 mr-2" /> Anular Factura
-                               </DropdownMenuItem>
+                               <>
+
+                                 <DropdownMenuItem className="rounded-xl font-bold p-3 cursor-pointer" onSelect={() => handleResendEmail(inv)}>
+                                   <Mail className="w-4 h-4 mr-2" /> Reenviar al Correo
+                                 </DropdownMenuItem>
+                                 <DropdownMenuItem className="rounded-xl font-bold p-3 text-destructive cursor-pointer" onSelect={() => handleAnnulInvoice(inv)}>
+                                   <Ban className="w-4 h-4 mr-2" /> Anular Factura
+                                 </DropdownMenuItem>
+                               </>
                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -472,7 +584,11 @@ export default function InvoicesPage() {
                                 <DropdownMenuItem className="rounded-xl font-bold p-3 cursor-pointer" onSelect={() => setSelectedInvoiceId(inv.id)}><FileText className="w-4 h-4 mr-2" /> Ver RIDE (PDF)</DropdownMenuItem>
                                 <DropdownMenuItem className="rounded-xl font-bold p-3 cursor-pointer" onSelect={() => handleDownloadXML(inv)}><Download className="w-4 h-4 mr-2" /> Descargar XML (Oficial)</DropdownMenuItem>
                                 {inv.status !== 'CANCELLED' && isOwner && (
-                                  <DropdownMenuItem className="rounded-xl font-bold p-3 text-destructive cursor-pointer" onSelect={() => handleAnnulInvoice(inv)}><Ban className="w-4 h-4 mr-2" /> Anular Factura</DropdownMenuItem>
+                                  <>
+
+                                    <DropdownMenuItem className="rounded-xl font-bold p-3 cursor-pointer" onSelect={() => handleResendEmail(inv)}><Mail className="w-4 h-4 mr-2" /> Reenviar al Correo</DropdownMenuItem>
+                                    <DropdownMenuItem className="rounded-xl font-bold p-3 text-destructive cursor-pointer" onSelect={() => handleAnnulInvoice(inv)}><Ban className="w-4 h-4 mr-2" /> Anular Factura</DropdownMenuItem>
+                                  </>
                                 )}
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -613,6 +729,18 @@ export default function InvoicesPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Muestra indicador global mientras procesa SRI o Correos */}
+        {(isResendingSRI || isResendingEmail) && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white p-6 rounded-3xl flex flex-col items-center gap-4 shadow-2xl">
+              <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+              <p className="font-black text-sm uppercase tracking-widest text-slate-800">
+                {isResendingSRI ? 'Reenviando a SRI...' : 'Enviando correo...'}
+              </p>
+            </div>
+          </div>
+        )}
 
       </TooltipProvider>
     </DashboardShell>
