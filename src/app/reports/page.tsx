@@ -241,7 +241,7 @@ export default function ReportsPage() {
     });
 
     const filteredMovements = (allMovements || []).filter(m => {
-      const mDate = m.createdAt?.split('T')[0];
+      const mDate = getEcuadorDate(m.createdAt);
       const matchesDate = (!startDate || mDate >= startDate) && (!endDate || mDate <= endDate);
       const matchesBranch = selectedBranch === 'all' || m.branchId === selectedBranch || (isMatrizId(selectedBranch) && isMatrizId(m.branchId));
       const matchesProduct = !ps || normalizeText(m.productName || '').includes(ps);

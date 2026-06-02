@@ -19,7 +19,7 @@ import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@
 import { collection, query, where, doc } from 'firebase/firestore';
 import { generateBranchDailyReportPDF } from '@/lib/reports-pdf-generator';
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
+import { cn, getEcuadorDate } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 
@@ -72,7 +72,7 @@ export default function CashierReportsPage() {
   const filteredHistoricalClosures = useMemo(() => {
     if (!allHistoricalSorted) return [];
     return allHistoricalSorted.filter(c => {
-      const closureDate = c.createdAt?.split('T')[0];
+      const closureDate = getEcuadorDate(c.createdAt);
       return (!startDate || closureDate >= startDate) && (!endDate || closureDate <= endDate);
     });
   }, [allHistoricalSorted, startDate, endDate]);
@@ -81,7 +81,7 @@ export default function CashierReportsPage() {
     if (!myInvoices) return [];
     return myInvoices
       .filter(inv => {
-        const date = inv.createdAt?.split('T')[0];
+        const date = getEcuadorDate(inv.createdAt);
         const inDate = (!startDate || date >= startDate) && (!endDate || date <= endDate);
         const matchesSearch = !invoiceSearch || inv.invoiceNumber?.includes(invoiceSearch) || inv.buyerInfo?.razonSocial?.toLowerCase().includes(invoiceSearch.toLowerCase());
         return inDate && matchesSearch;
@@ -151,7 +151,8 @@ export default function CashierReportsPage() {
         expectedTotal: lastClosure.totalExpectedCash,
         countedTotal: lastClosure.countedCash,
         difference: lastClosure.difference
-      } : undefined
+      } : undefined,
+      workerBreakdown: lastClosure ? lastClosure.workerBreakdown : undefined
     });
   };
 
@@ -185,7 +186,8 @@ export default function CashierReportsPage() {
         expectedTotal: closure.totalExpectedCash,
         countedTotal: closure.countedCash,
         difference: closure.difference
-      }
+      },
+      workerBreakdown: closure.workerBreakdown
     });
   };
 
@@ -250,7 +252,7 @@ export default function CashierReportsPage() {
               </Card>
               <Card className="border-none shadow-sm rounded-[2rem] bg-white p-8">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Otros Métodos</p>
-                <h3 className="text-4xl font-black tracking-tighter text-slate-900">${(stats?.methods.cards + stats?.methods.transfer + stats?.methods.others).toFixed(2)}</h3>
+                <h3 className="text-4xl font-black tracking-tighter text-slate-900">${((stats?.methods.cards || 0) + (stats?.methods.transfer || 0) + (stats?.methods.others || 0)).toFixed(2)}</h3>
               </Card>
             </div>
 

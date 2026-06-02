@@ -38,6 +38,10 @@ interface BranchReportData {
     countedTotal: number;
     difference: number;
   };
+  workerBreakdown?: Array<{
+    cashierName: string;
+    total: number;
+  }>;
   transactions?: any[];
 }
 
@@ -115,6 +119,21 @@ export function generateBranchDailyReportPDF(data: BranchReportData) {
       body: [['VENTA ESPERADA:', `$${data.cashReconciliation.expectedTotal.toFixed(2)}`], ['CONTEO REAL:', `$${data.cashReconciliation.countedTotal.toFixed(2)}`], ['DIFERENCIA:', `$${data.cashReconciliation.difference.toFixed(2)}`]],
       theme: 'grid',
       styles: { fontSize: 7.5 },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+    });
+  }
+
+  if (data.workerBreakdown && data.workerBreakdown.length > 0) {
+    curY = (doc as any).lastAutoTable.finalY + 4;
+    doc.setFont('helvetica', 'bold');
+    doc.text('DESGLOSE POR TRABAJADOR:', 10, curY);
+    autoTable(doc, {
+      startY: curY + 2,
+      head: [['TRABAJADOR', 'TOTAL RECAUDADO']],
+      body: data.workerBreakdown.map((w) => [(w.cashierName || 'DESCONOCIDO').toUpperCase(), `$${w.total.toFixed(2)}`]),
+      theme: 'grid',
+      styles: { fontSize: 7.5 },
+      headStyles: { fillColor: [40, 40, 40] },
       columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
     });
   }

@@ -211,7 +211,8 @@ export default function UnifiedClosuresPage() {
         expectedTotal: closure.totalExpectedCash || closure.totalSales || 0,
         countedTotal: closure.countedCash || 0,
         difference: closure.difference || 0
-      }
+      },
+      workerBreakdown: closure.workerBreakdown
     });
   };
 

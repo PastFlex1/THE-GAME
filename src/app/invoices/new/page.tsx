@@ -77,6 +77,9 @@ export default function NewInvoicePage() {
   const [branchSearchInput, setBranchSearchInput] = useState('');
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
 
+  const [isBranchClosed, setIsBranchClosed] = useState(false);
+  const [branchLockMessage, setBranchLockMessage] = useState('');
+
   const FIXED_MATRIZ_ADDRESS = "REPUBLICA DEL SALVADOR N36-110 Y N36 SUECIA - BQ.3 10 06 EDF METRO PLAZA";
   const UNIFIED_ESTAB = "002";
   const UNIFIED_PTO_EMI = "002";
@@ -215,6 +218,67 @@ export default function NewInvoicePage() {
     return () => unsubscribe();
   }, [firestore, companyId]);
 
+  useEffect(() => {
+    if (!firestore || !currentBranch) {
+      setIsBranchClosed(false);
+      return;
+    }
+    
+    // Consultar cierres de la sucursal actual (sin orderBy para evitar error de índice compuesto)
+    const q = query(
+      collection(firestore, 'cash_closures'), 
+      where('branchId', '==', currentBranch.id)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      if (snap.empty) {
+        setIsBranchClosed(false);
+        return;
+      }
+
+      // Ordenar en memoria por fecha descendente
+      const closures = snap.docs.map(d => d.data());
+      closures.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      const lastClosureData = closures[0];
+      if (!lastClosureData.createdAt) {
+        setIsBranchClosed(false);
+        return;
+      }
+
+      // Lógica: "hasta el siguiente dia 7 am hora ecuador"
+      // Convertir la fecha de cierre a fecha/hora Ecuador
+      const closureDate = new Date(lastClosureData.createdAt);
+      // Ajustar UTC a Ecuador (-5)
+      const ecClosureTime = new Date(closureDate.getTime() - (5 * 60 * 60 * 1000));
+      
+      const now = new Date();
+      const ecNowTime = new Date(now.getTime() - (5 * 60 * 60 * 1000));
+
+      // Determinar la fecha/hora en la que se desbloquea (next 7 AM)
+      const unlockTime = new Date(ecClosureTime);
+      if (ecClosureTime.getHours() < 7) {
+        // Si cerró antes de las 7am (ej: 2am), se desbloquea el MISMO día a las 7am
+        unlockTime.setHours(7, 0, 0, 0);
+      } else {
+        // Si cerró después de las 7am (ej: 8pm), se desbloquea al SIGUIENTE día a las 7am
+        unlockTime.setDate(unlockTime.getDate() + 1);
+        unlockTime.setHours(7, 0, 0, 0);
+      }
+
+      if (ecNowTime < unlockTime) {
+        setIsBranchClosed(true);
+        // Ajustamos la fecha a mostrar para que el usuario entienda
+        const unlockDateString = unlockTime.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+        setBranchLockMessage(`La caja de esta sucursal está CERRADA. Se habilitará el ${unlockDateString} a las 07:00 AM.`);
+      } else {
+        setIsBranchClosed(false);
+      }
+    });
+
+    return () => unsub();
+  }, [firestore, currentBranch]);
+
   const productsQuery = useMemoFirebase(() => {
     if (!firestore || !currentBranch) return null;
     return query(collection(firestore, 'product_services'), where('branchId', '==', currentBranch.id));
@@ -290,7 +354,7 @@ export default function NewInvoicePage() {
         cashierId: resolvedIdentification, 
         cashierName: userProfile ? `${userProfile.firstName} ${userProfile.lastName}` : 'Cajero',
         totalAmount: totalConIVA, 
-        totalCost: items.reduce((acc, item) => acc + (item.cost * (item.quantity === "" ? 1 : item.quantity)), 0),
+        totalCost: items.reduce<number>((acc, item) => acc + (item.cost * Number(item.quantity === "" ? 1 : item.quantity)), 0),
         status: 'EMITIDA', 
         createdAt: new Date().toISOString(),
         items: items.map(i => ({ 
@@ -447,8 +511,17 @@ export default function NewInvoicePage() {
                 <span className="text-[10px] md:text-xs font-black uppercase tracking-tight">SIGUIENTE: {nextInvoiceNumber}</span>
               </div>
             </div>
+            {isBranchClosed && (
+              <div className="mt-4 p-4 bg-red-100 border border-red-200 rounded-xl flex items-start gap-3 max-w-2xl">
+                <div className="p-2 bg-red-500 text-white rounded-lg"><CheckCircle2 className="w-5 h-5" /></div>
+                <div>
+                  <h3 className="text-red-800 font-black uppercase text-sm">Facturación Bloqueada</h3>
+                  <p className="text-red-700 text-xs font-bold mt-1">{branchLockMessage}</p>
+                </div>
+              </div>
+            )}
           </div>
-          <Button onClick={handleEmit} disabled={isSubmitting || items.length === 0 || !idValidation.isValid} className="h-14 md:h-16 px-8 md:px-12 bg-black text-white rounded-xl md:rounded-[1.5rem] font-black shadow-2xl hover:scale-[1.02] active:scale-95 transition-all w-full md:w-auto text-sm md:text-base">
+          <Button onClick={handleEmit} disabled={isSubmitting || items.length === 0 || !idValidation.isValid || isBranchClosed} className="h-14 md:h-16 px-8 md:px-12 bg-black text-white rounded-xl md:rounded-[1.5rem] font-black shadow-2xl hover:scale-[1.02] active:scale-95 transition-all w-full md:w-auto text-sm md:text-base">
             {isSubmitting ? <Loader2 className="animate-spin" /> : `AUTORIZAR SRI`}
           </Button>
         </div>

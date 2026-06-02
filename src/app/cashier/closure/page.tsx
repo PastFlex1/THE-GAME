@@ -72,6 +72,8 @@ export default function CashierClosurePage() {
     transactionCount: 0
   });
 
+  const [workerBreakdown, setWorkerBreakdown] = useState<{cashierName: string, total: number}[]>([]);
+
   const userDocRef = useMemoFirebase(() => {
     if (!firestore || !resolvedIdentification) return null;
     return doc(firestore, 'users', resolvedIdentification);
@@ -105,15 +107,15 @@ export default function CashierClosurePage() {
   }, [allBranches, selectedBranchId]);
 
   const closuresQuery = useMemoFirebase(() => {
-    if (!firestore || !resolvedIdentification) return null;
-    return query(collection(firestore, 'cash_closures'), where('cashierId', '==', resolvedIdentification));
-  }, [firestore, resolvedIdentification]);
+    if (!firestore || !selectedBranchId) return null;
+    return query(collection(firestore, 'cash_closures'), where('branchId', '==', selectedBranchId));
+  }, [firestore, selectedBranchId]);
   const { data: closuresData } = useCollection(closuresQuery);
 
   const invoicesQuery = useMemoFirebase(() => {
-    if (!firestore || !resolvedIdentification) return null;
-    return query(collection(firestore, 'invoices'), where('cashierId', '==', resolvedIdentification));
-  }, [firestore, resolvedIdentification]);
+    if (!firestore || !selectedBranchId) return null;
+    return query(collection(firestore, 'invoices'), where('branchId', '==', selectedBranchId));
+  }, [firestore, selectedBranchId]);
   const { data: myInvoices, isLoading } = useCollection(invoicesQuery);
 
   useEffect(() => {
@@ -134,6 +136,19 @@ export default function CashierClosurePage() {
     const cardTotal = currentShiftInvoices.filter(inv => inv.paymentMethod === '16' || inv.paymentMethod === '19').reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
     const transferTotal = currentShiftInvoices.filter(inv => inv.paymentMethod === '20').reduce((acc, inv) => acc + (inv.totalAmount || 0), 0);
     const others = total - (cashTotal + cardTotal + transferTotal);
+
+    const breakdownMap = new Map<string, { cashierName: string, total: number }>();
+    currentShiftInvoices.forEach(inv => {
+      const cId = inv.cashierId || 'Desconocido';
+      const cName = inv.cashierName || 'Cajero';
+      const amt = inv.totalAmount || 0;
+      if (!breakdownMap.has(cId)) {
+        breakdownMap.set(cId, { cashierName: cName, total: 0 });
+      }
+      breakdownMap.get(cId)!.total += amt;
+    });
+
+    setWorkerBreakdown(Array.from(breakdownMap.values()));
 
     setFormData(prev => ({
       ...prev, totalSales: total, expectedCash: cashTotal, cardSales: cardTotal, 
@@ -159,7 +174,8 @@ export default function CashierClosurePage() {
       createdAt: new Date().toISOString(), totalSales: formData.totalSales, cashSales: formData.expectedCash,
       cardSales: formData.cardSales, transferSales: formData.transferSales, otherMethods: formData.otherMethods,
       totalExpectedCash: formData.totalSales, countedCash: formData.countedCash, difference,
-      observations: formData.observations, statusLabel: statusInfo.label, transactionCount: formData.transactionCount
+      observations: formData.observations, statusLabel: statusInfo.label, transactionCount: formData.transactionCount,
+      workerBreakdown
     });
 
     setTimeout(() => {

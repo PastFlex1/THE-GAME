@@ -37,7 +37,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from '@/lib/utils';
+import { cn, getEcuadorDate } from '@/lib/utils';
 
 export default function GlobalMovementsPage() {
   const firestore = useFirestore();
@@ -150,7 +150,7 @@ export default function GlobalMovementsPage() {
       const matchesType = typeFilter === 'all' || m.type === typeFilter;
       const matchesBranch = filterBranchId === 'all' || m.branchId === filterBranchId || (isMatrizId(filterBranchId) && isMatrizId(m.branchId));
       
-      const mDate = m.createdAt?.split('T')[0];
+      const mDate = getEcuadorDate(m.createdAt);
       
       let matchesDate = true;
       if (startDate && endDate) {

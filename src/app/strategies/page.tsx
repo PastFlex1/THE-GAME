@@ -43,7 +43,7 @@ import {
 import { useFirestore, useCollection, useMemoFirebase, useUser, useDoc } from '@/firebase';
 import { collection, query, doc, deleteDoc } from 'firebase/firestore';
 import { addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
-import { cn } from '@/lib/utils';
+import { cn, getEcuadorDate } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 export default function StrategiesPage() {
@@ -56,7 +56,7 @@ export default function StrategiesPage() {
     title: '',
     description: '',
     type: 'PROMO',
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: getEcuadorDate(new Date()),
     endDate: '',
     isActive: true
   });
@@ -83,7 +83,7 @@ export default function StrategiesPage() {
       createdBy: resolvedIdentification
     });
     setIsAddOpen(false);
-    setNewStrategy({ title: '', description: '', type: 'PROMO', startDate: new Date().toISOString().split('T')[0], endDate: '', isActive: true });
+    setNewStrategy({ title: '', description: '', type: 'PROMO', startDate: getEcuadorDate(new Date()), endDate: '', isActive: true });
     toast({ title: "Estrategia Lanzada", description: "Sincronizada con las 45 sucursales." });
   };
 
