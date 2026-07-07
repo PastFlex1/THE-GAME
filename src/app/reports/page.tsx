@@ -125,15 +125,15 @@ export default function ReportsPage() {
   }, [selectedBranch, startDate, endDate, productSearch]);
 
   const { data: allInvoices, isLoading: loadingInvoices } = useBranchCollection(
-    firestore, 'invoices', isOwner, myBranchIds, companyId, loadingProfile, 5000, 8000
+    firestore, 'invoices', isOwner, myBranchIds, companyId, loadingProfile, 10000, 10000, isSuperAdmin
   );
 
   const { data: allClosures, isLoading: loadingClosures } = useBranchCollection(
-    firestore, 'cash_closures', isOwner, myBranchIds, companyId, loadingProfile, 2000, 8000
+    firestore, 'cash_closures', isOwner, myBranchIds, companyId, loadingProfile, 10000, 10000, isSuperAdmin
   );
 
   const { data: allMovements, isLoading: loadingMovements } = useBranchCollection(
-    firestore, 'inventory_movements', isOwner, myBranchIds, companyId, loadingProfile, 1500, 8000
+    firestore, 'inventory_movements', isOwner, myBranchIds, companyId, loadingProfile, 10000, 10000, isSuperAdmin
   );
 
   const getEcuadorDate = (dateVal: any) => {

@@ -112,7 +112,7 @@ export default function InvoicesPage() {
   const { data: allBranches } = useCollection(branchesQuery);
 
   const { data: rawInvoices, isLoading: loadingInvoices } = useBranchCollection(
-    firestore, 'invoices', isOwner, assignedBranchIds, companyId, loadingProfile, 8000, 8000
+    firestore, 'invoices', isOwner, assignedBranchIds, companyId, loadingProfile, 10000, 10000, isSuperAdmin
   );
 
   const normalizeText = (str: string) => {

@@ -8,8 +8,9 @@ export function useBranchCollection(
   myBranchIds: string[],
   companyId: string | null | undefined,
   loadingProfile: boolean,
-  ownerLimit = 5000,
-  branchLimit = 8000
+  ownerLimit = 10000,
+  branchLimit = 10000,
+  isSuperAdmin = false
 ) {
   const [data, setData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,11 +29,16 @@ export function useBranchCollection(
     setIsLoading(true);
 
     if (isOwner) {
-      if (!companyId) {
+      if (!isSuperAdmin && !companyId) {
         setIsLoading(false);
         return;
       }
-      const q = query(collection(firestore, collectionName), where('companyId', '==', companyId), limit(ownerLimit));
+      
+      const baseCol = collection(firestore, collectionName);
+      const q = isSuperAdmin 
+        ? query(baseCol, limit(ownerLimit)) 
+        : query(baseCol, where('companyId', '==', companyId), limit(ownerLimit));
+        
       const sub = onSnapshot(q, (snap) => {
         const arr: any[] = [];
         snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
